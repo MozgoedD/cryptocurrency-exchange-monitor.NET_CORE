@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "JiNZLeunAbZ/5ME4IIbkP4vf0kA2jVk8H3muKub9Yzu+P1EY22IYmiJzaCYQmlA0Vctla4QT78SaimxR5LLryA==",
+  "success": true,
+  "projectFilePath": "/Users/azatislamov/Code/cryptomonitor_cs/cryptomonitor_cs/cryptomonitor_cs.csproj",
+  "expectedPackageFiles": [
+    "/Users/azatislamov/.nuget/packages/system.reactive/4.3.2/system.reactive.4.3.2.nupkg.sha512",
+    "/Users/azatislamov/.nuget/packages/system.threading.channels/4.7.0/system.threading.channels.4.7.0.nupkg.sha512",
+    "/Users/azatislamov/.nuget/packages/websocket.client/4.3.15/websocket.client.4.3.15.nupkg.sha512",
+    "/Users/azatislamov/.nuget/packages/microsoft.aspnetcore.app.ref/3.0.1/microsoft.aspnetcore.app.ref.3.0.1.nupkg.sha512"
+  ],
+  "logs": []
+}
