@@ -1,19 +1,16 @@
 ﻿<Properties StartupConfiguration="{A55745F8-9A99-43B8-98EB-FA8EBD554B91}|Default">
-  <MonoDevelop.Ide.Workbench ActiveDocument="cryptomonitor_cs/bin/Debug/netcoreapp3.0/Responce.log">
+  <MonoDevelop.Ide.Workbench ActiveDocument="cryptomonitor_cs/bin/Debug/netcoreapp3.0/Market.log">
     <Files>
-      <File FileName="cryptomonitor_cs/Program.cs" Line="408" Column="81" />
-      <File FileName="cryptomonitor_cs/MarketState.cs" Line="58" Column="117" />
-      <File FileName="cryptomonitor_cs/SymbolState.cs" Line="1" Column="1" />
-      <File FileName="cryptomonitor_cs/bin/Debug/netcoreapp3.0/Market.log" Line="17" Column="1" />
-      <File FileName="cryptomonitor_cs/bin/Debug/netcoreapp3.0/Profit.log" Line="1" Column="1" />
-      <File FileName="cryptomonitor_cs/bin/Debug/netcoreapp3.0/Responce.log" Line="35" Column="1" />
+      <File FileName="cryptomonitor_cs/Program.cs" Line="569" Column="102" />
+      <File FileName="cryptomonitor_cs/bin/Debug/netcoreapp3.0/Market.log" Line="1774" Column="32" />
+      <File FileName="cryptomonitor_cs/bin/Debug/netcoreapp3.0/Profit.log" />
     </Files>
     <Pads>
       <Pad Id="ProjectPad">
         <State name="__root__">
           <Node name="cryptomonitor_cs" expanded="True">
             <Node name="cryptomonitor_cs" expanded="True">
-              <Node name="SymbolState.cs" selected="True" />
+              <Node name="Program.cs" selected="True" />
             </Node>
           </Node>
         </State>

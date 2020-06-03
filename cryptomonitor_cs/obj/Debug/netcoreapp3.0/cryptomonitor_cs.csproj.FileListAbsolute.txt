@@ -14,5 +14,4 @@
 /Users/azatislamov/Code/cryptomonitor_cs/cryptomonitor_cs/obj/Debug/netcoreapp3.0/cryptomonitor_cs.dll
 /Users/azatislamov/Code/cryptomonitor_cs/cryptomonitor_cs/obj/Debug/netcoreapp3.0/cryptomonitor_cs.pdb
 /Users/azatislamov/Code/cryptomonitor_cs/cryptomonitor_cs/obj/Debug/netcoreapp3.0/cryptomonitor_cs.genruntimeconfig.cache
-/Users/azatislamov/Code/cryptomonitor_cs/cryptomonitor_cs/bin/Debug/netcoreapp3.0/GateIOJson.cs
 /Users/azatislamov/Code/cryptomonitor_cs/cryptomonitor_cs/obj/Debug/netcoreapp3.0/cryptomonitor_cs.csprojAssemblyReference.cache

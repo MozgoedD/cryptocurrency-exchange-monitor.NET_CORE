@@ -12,6 +12,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Configuration;
 using System.Linq;
+using System.Text;
 
 namespace cryptomonitor_cs
 {
@@ -29,10 +30,10 @@ namespace cryptomonitor_cs
         // также создаются логи, содержащие "стакан" асков и бидов по 10 на каждую монету и биржу
         // все логи в /cryptomonitor_cs/bin/Debug/netcoreapp3.0/
         // запуск приложения /cryptomonitor_cs/bin/Debug/netcoreapp3.0/dotnet cryptomonitor_cs.dll (по крайней мере на Unix)
-        // при запуске в консоле должно отобразиться ОК для каждой монеты-биржи
+        // при запуске в консоли должно отобразиться ОК для каждой монеты-биржи
         private static readonly object GATE1 = new object();
 
-        public static string DecompressString(byte[] baseBytes)
+        public static string DecompressOkex(byte[] baseBytes)
         {
             using (var decompressedStream = new MemoryStream())
             using (var compressedStream = new MemoryStream(baseBytes))
@@ -44,6 +45,17 @@ namespace cryptomonitor_cs
                 {
                     return streamReader.ReadToEnd();
                 }
+            }
+        }
+
+        public static byte[] DecompressHuobi(byte[] data)
+        {
+            using (var compressedStream = new MemoryStream(data))
+            using (var zipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
+            using (var resultStream = new MemoryStream())
+            {
+                zipStream.CopyTo(resultStream);
+                return resultStream.ToArray();
             }
         }
 
@@ -219,8 +231,8 @@ namespace cryptomonitor_cs
                         }
                     }
 
-                    asks_vols.RemoveAll(x => x.Volume <= 0.1m);
-                    bids_vols.RemoveAll(x => x.Volume <= 0.1m);
+                    asks_vols.RemoveAll(x => x.Volume <= marketObj.MinVolume);
+                    bids_vols.RemoveAll(x => x.Volume <= marketObj.MinVolume);
 
                     asks_vols.Sort((a, b) => a.Value.CompareTo(b.Value));
                     bids_vols.Sort((a, b) => b.Value.CompareTo(a.Value));
@@ -229,7 +241,7 @@ namespace cryptomonitor_cs
 
                     foreach (ValueVolume vv in asks_vols)
                     {
-                        if (vv.Volume >= 0.1m)
+                        if (vv.Volume >= marketObj.MinVolume)
                         {
                             symObj.Ask = vv.Value;
                             marketObj.WriteMarket();
@@ -238,7 +250,7 @@ namespace cryptomonitor_cs
                     }
                     foreach (ValueVolume vv in bids_vols)
                     {
-                        if (vv.Volume >= 0.1m)
+                        if (vv.Volume >= marketObj.MinVolume)
                         {
                             symObj.Bid = vv.Value;
                             marketObj.WriteMarket();
@@ -266,7 +278,7 @@ namespace cryptomonitor_cs
             .Subscribe(msg =>
             {
                 byte[] bytes = msg.Binary;
-                string okexJson = DecompressString(bytes);
+                string okexJson = DecompressOkex(bytes);
                 WriteResponce("okex", okexJson);
 
                 if (okexJson.Contains("event"))
@@ -346,8 +358,8 @@ namespace cryptomonitor_cs
                             }
                         }
 
-                        asks_vols.RemoveAll(x => x.Volume <= 0.1m);
-                        bids_vols.RemoveAll(x => x.Volume <= 0.1m);
+                        asks_vols.RemoveAll(x => x.Volume <= marketObj.MinVolume);
+                        bids_vols.RemoveAll(x => x.Volume <= marketObj.MinVolume);
 
                         asks_vols.Sort((a, b) => a.Value.CompareTo(b.Value));
                         bids_vols.Sort((a, b) => b.Value.CompareTo(a.Value));
@@ -356,7 +368,7 @@ namespace cryptomonitor_cs
 
                         foreach (ValueVolume vv in asks_vols)
                         {
-                            if (vv.Volume >= 0.1m)
+                            if (vv.Volume >= marketObj.MinVolume)
                             {
                                 symObj.Ask = vv.Value;
                                 marketObj.WriteMarket();
@@ -365,7 +377,7 @@ namespace cryptomonitor_cs
                         }
                         foreach (ValueVolume vv in bids_vols)
                         {
-                            if (vv.Volume >= 0.1m)
+                            if (vv.Volume >= marketObj.MinVolume)
                             {
                                 symObj.Bid = vv.Value;
                                 marketObj.WriteMarket();
@@ -376,6 +388,70 @@ namespace cryptomonitor_cs
                 }
             });
             return okexClient;
+        }
+
+
+
+        public static WebsocketClient StartHuobi(Uri huobi_url, SymbolState symObj, MarketState marketObj)
+        {
+            var huobiClient = new WebsocketClient(huobi_url);
+            huobiClient.ReconnectTimeout = TimeSpan.FromSeconds(30);
+            huobiClient.ReconnectionHappened.Subscribe(info =>
+                Console.WriteLine($"Reconnection happened, type: {info.Type}"));
+            huobiClient
+            .MessageReceived
+            .ObserveOn(TaskPoolScheduler.Default)
+            .Synchronize(GATE1)
+            .Subscribe(msg =>
+            {
+                byte[] bytes = msg.Binary;
+                string huobiJson = Encoding.UTF8.GetString(DecompressHuobi(bytes));
+                //Console.WriteLine(huobiJson);
+                WriteResponce("Huobi Global", huobiJson);
+                if (huobiJson.Contains("status"))
+                {
+                    HuobiJson.Init huobiData = JsonSerializer.Deserialize<HuobiJson.Init>(huobiJson);
+                    if (huobiData.Status == "ok" && huobiData.Subbed == $"market.{symObj.Symbol.ToLower()}usdt.depth.step0")
+                    {
+                        Console.WriteLine($"huobi: {symObj.Symbol}-USDT ok!");
+                    }
+                }
+                else if (huobiJson.Contains("tick"))
+                {
+                    HuobiJson.Data huobiData = JsonSerializer.Deserialize<HuobiJson.Data>(huobiJson);
+                    foreach (object Ask in huobiData.Tick.Asks)
+                    {
+                        List<decimal> ask_vol = JsonSerializer.Deserialize<List<decimal>>(Ask.ToString());
+                        if (ask_vol[1] >= marketObj.MinVolume)
+                        {
+                            decimal ask = ask_vol[0];
+                            symObj.Ask = ask;
+                            break;
+                        }
+                    }
+                    foreach (object Bid in huobiData.Tick.Bids)
+                    {
+                        List<decimal> bid_vol = JsonSerializer.Deserialize<List<decimal>>(Bid.ToString());
+                        if (bid_vol[1] >= marketObj.MinVolume)
+                        {
+                            decimal bid = bid_vol[0];
+                            symObj.Bid = bid;
+                            break;
+                        }
+                    }
+                    marketObj.WriteMarket();
+                }                
+                else if (huobiJson.Contains("ping"))
+                {
+                    HuobiJson.Ping huobiData = JsonSerializer.Deserialize<HuobiJson.Ping>(huobiJson);
+                    long pingId = huobiData.PingId;
+                    HuobiJson.Pong pongReq = new HuobiJson.Pong() { PongId = pingId };
+                    string pongJson = JsonSerializer.Serialize<HuobiJson.Pong>(pongReq);
+                    Task.Run(() => huobiClient.Send($"{pongJson}"));
+                    //Console.WriteLine($"Huobi {symObj.Symbol} Pong");
+                }
+            });
+            return huobiClient;
         }
 
         public static string GateioRequestGenerator(string sym)
@@ -400,26 +476,30 @@ namespace cryptomonitor_cs
             return okexRequestJson;
         }
 
+        public static string HuobiRequestGenerator(string sym)
+        {
+            string sub = $"market.{sym.ToLower()}usdt.depth.step0";
+            string id = "1";
+            HuobiJson.Request huobiRequest = new HuobiJson.Request() { Sub = sub, Id = id };
+            string huobiRequestJson = JsonSerializer.Serialize<HuobiJson.Request>(huobiRequest);
+            Console.WriteLine(huobiRequestJson);
+            return huobiRequestJson;
+        }
+
         static void Main(string[] args)
         {
             var exitEvent = new ManualResetEvent(false);
             var gateio_url = new Uri("wss://ws.gate.io/v3/");
             var okex_url = new Uri("wss://real.OKEx.com:8443/ws/v3");
+            var huobi_url = new Uri("wss://api.huobi.pro/ws");
 
-
+            // BTC
             // параметры: название биржи, название символа
             SymbolState gateioBTC = new SymbolState("gate.io", "BTC");
             SymbolState okexBTC = new SymbolState("okex", "BTC");
-            // параметры: название символа, объекты SymbilState, минмальное значение разницы, минимальный шаг
-            MarketState BTC = new MarketState("BTC", ref gateioBTC, ref okexBTC, 0.01m, 0.01m);
-
-            SymbolState gateioLTC = new SymbolState("gate.io", "LTC");
-            SymbolState okexLTC = new SymbolState("okex", "LTC");
-            MarketState LTC = new MarketState("LTC", ref gateioLTC, ref okexLTC, 0.01m, 0.01m);
-
-            SymbolState gateioETH = new SymbolState("gate.io", "ETH");
-            SymbolState okexETH = new SymbolState("okex", "ETH");
-            MarketState ETH = new MarketState("ETH", ref gateioETH, ref okexETH, 0.01m, 0.01m);
+            SymbolState huobiBTC = new SymbolState("huobi", "BTC");
+            // параметры: название символа, объекты SymbilState, минимальное значение разницы, минимальный шаг и минимальный объем аска/бида
+            MarketState BTC = new MarketState("BTC", ref gateioBTC, ref okexBTC, ref huobiBTC, 1m, 0.1m, 0.01m);
 
             // запуск WebSocket клиента и отправка запроса для каждой пары Монета-Биржа
             WebsocketClient gateioClientBTC = StartGateIO(gateio_url, gateioBTC, BTC);
@@ -427,31 +507,81 @@ namespace cryptomonitor_cs
             string gateioRequestJsonBTC = GateioRequestGenerator(gateioBTC.Symbol);
             Task.Run(() => gateioClientBTC.Send($"{gateioRequestJsonBTC}"));
 
-            WebsocketClient gateioClientLTC = StartGateIO(gateio_url, gateioLTC, LTC);
-            Task.Run(() => gateioClientLTC.Start());
-            string gateioRequestJsonLTC = GateioRequestGenerator(gateioLTC.Symbol);
-            Task.Run(() => gateioClientLTC.Send($"{gateioRequestJsonLTC}"));
-
-            WebsocketClient gateioClientETH = StartGateIO(gateio_url, gateioETH, ETH);
-            Task.Run(() => gateioClientETH.Start());
-            string gateioRequestJsonETH = GateioRequestGenerator(gateioETH.Symbol);
-            Task.Run(() => gateioClientETH.Send($"{gateioRequestJsonETH}"));
-
-
             WebsocketClient okexClientBTC = StartOkex(okex_url, okexBTC, BTC);
             Task.Run(() => okexClientBTC.Start());
             string okexRequestJsonBTC = OkexRequestGenerator(okexBTC.Symbol);
             Task.Run(() => okexClientBTC.Send($"{okexRequestJsonBTC}"));
+
+            WebsocketClient huobiClientBTC = StartHuobi(huobi_url, huobiBTC, BTC);
+            Task.Run(() => huobiClientBTC.Start());
+            string huobiRequestJsonBTC = HuobiRequestGenerator(huobiBTC.Symbol);
+            Task.Run(() => huobiClientBTC.Send($"{huobiRequestJsonBTC}"));
+
+
+            // LTC
+            SymbolState gateioLTC = new SymbolState("gate.io", "LTC");
+            SymbolState okexLTC = new SymbolState("okex", "LTC");
+            SymbolState huobiLTC = new SymbolState("huobi", "LTC");
+            MarketState LTC = new MarketState("LTC", ref gateioLTC, ref okexLTC, ref huobiLTC, 1m, 0.1m, 1m);
+
+            WebsocketClient gateioClientLTC = StartGateIO(gateio_url, gateioLTC, LTC);
+            Task.Run(() => gateioClientLTC.Start());
+            string gateioRequestJsonLTC = GateioRequestGenerator(gateioLTC.Symbol);
+            Task.Run(() => gateioClientLTC.Send($"{gateioRequestJsonLTC}"));
 
             WebsocketClient okexClientLTC = StartOkex(okex_url, okexLTC, LTC);
             Task.Run(() => okexClientLTC.Start());
             string okexRequestJsonLTC = OkexRequestGenerator(okexLTC.Symbol);
             Task.Run(() => okexClientLTC.Send($"{okexRequestJsonLTC}"));
 
-            WebsocketClient okexClientETH = StartOkex(okex_url, okexETH, ETH);
-            Task.Run(() => okexClientETH.Start());
-            string okexRequestJsonETH = OkexRequestGenerator(okexETH.Symbol);
-            Task.Run(() => okexClientETH.Send($"{okexRequestJsonETH}"));
+            WebsocketClient huobiClientLTC = StartHuobi(huobi_url, huobiLTC, LTC);
+            Task.Run(() => huobiClientLTC.Start());
+            string huobiRequestJsonLTC = HuobiRequestGenerator(huobiLTC.Symbol);
+            Task.Run(() => huobiClientLTC.Send($"{huobiRequestJsonLTC}"));
+
+
+            // ONT
+            SymbolState gateioONT = new SymbolState("gate.io", "ONT");
+            SymbolState okexONT = new SymbolState("okex", "ONT");
+            SymbolState huobiONT = new SymbolState("huobi", "ONT");
+            MarketState ONT = new MarketState("ONT", ref gateioONT, ref okexONT, ref huobiONT, 1m, 0.1m, 10m);
+
+            WebsocketClient gateioClientONT = StartGateIO(gateio_url, gateioONT, ONT);
+            Task.Run(() => gateioClientONT.Start());
+            string gateioRequestJsonONT = GateioRequestGenerator(gateioONT.Symbol);
+            Task.Run(() => gateioClientONT.Send($"{gateioRequestJsonONT}"));
+
+            WebsocketClient okexClientONT = StartOkex(okex_url, okexONT, ONT);
+            Task.Run(() => okexClientONT.Start());
+            string okexRequestJsonONT = OkexRequestGenerator(okexONT.Symbol);
+            Task.Run(() => okexClientONT.Send($"{okexRequestJsonONT}"));
+
+            WebsocketClient huobiClientONT = StartHuobi(huobi_url, huobiONT, ONT);
+            Task.Run(() => huobiClientONT.Start());
+            string huobiRequestJsonONT = HuobiRequestGenerator(huobiONT.Symbol);
+            Task.Run(() => huobiClientONT.Send($"{huobiRequestJsonONT}"));
+
+
+            // EOS
+            SymbolState gateioEOS = new SymbolState("gate.io", "EOS");
+            SymbolState okexEOS = new SymbolState("okex", "EOS");
+            SymbolState huobiEOS = new SymbolState("huobi", "EOS");
+            MarketState EOS = new MarketState("EOS", ref gateioEOS, ref okexEOS, ref huobiEOS, 1m, 0.1m, 10m);
+
+            WebsocketClient gateioClientEOS = StartGateIO(gateio_url, gateioEOS, EOS);
+            Task.Run(() => gateioClientEOS.Start());
+            string gateioRequestJsonEOS = GateioRequestGenerator(gateioEOS.Symbol);
+            Task.Run(() => gateioClientEOS.Send($"{gateioRequestJsonEOS}"));
+
+            WebsocketClient okexClientEOS = StartOkex(okex_url, okexEOS, EOS);
+            Task.Run(() => okexClientEOS.Start());
+            string okexRequestJsonEOS = OkexRequestGenerator(okexEOS.Symbol);
+            Task.Run(() => okexClientEOS.Send($"{okexRequestJsonEOS}"));
+
+            WebsocketClient huobiClientEOS = StartHuobi(huobi_url, huobiEOS, EOS);
+            Task.Run(() => huobiClientEOS.Start());
+            string huobiRequestJsonEOS = HuobiRequestGenerator(huobiEOS.Symbol);
+            Task.Run(() => huobiClientEOS.Send($"{huobiRequestJsonEOS}"));
 
             exitEvent.WaitOne();
         }

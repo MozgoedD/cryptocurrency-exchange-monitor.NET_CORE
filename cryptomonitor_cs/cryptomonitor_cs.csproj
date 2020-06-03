@@ -12,8 +12,5 @@
     <Compile Update="GateIO.cs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Compile>
-    <Compile Update="GateIOJson.cs">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Compile>
   </ItemGroup>
 </Project>

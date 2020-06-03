@@ -6,100 +6,65 @@ namespace cryptomonitor_cs
     public class MarketState
     {
         private string symbol;
-        private SymbolState gateioObj;
-        private SymbolState okexObj;
-        private decimal lastGateioAsk;
-        private decimal lastGateioBid;
-        private decimal lastOkexAsk;
-        private decimal lastOkexBid;
+        private decimal minVolume;
 
-        private bool wasGateOkexProfitable;
-        private decimal minDiffValue;
-        private decimal minStepValue;
+        private SymbolState objA;
+        private SymbolState objB;
+        private SymbolState objC;
 
-        private decimal lastGateOkex;
-        private decimal lastOkexGate;
+        private decimal lastA_Ask;
+        private decimal lastA_Bid;
+        private decimal lastB_Ask;
+        private decimal lastB_Bid;
+        private decimal lastC_Ask;
+        private decimal lastC_Bid;
+
+        DiffState AB;
+        DiffState AC;
+        DiffState BC;
 
 
-        public MarketState(string sym, ref SymbolState gateio, ref SymbolState okex, decimal minDiffValue_, decimal MinStepValue_)
+        public MarketState(string sym, ref SymbolState a, ref SymbolState b, ref SymbolState c, decimal minDiffValue, decimal MinStepValue, decimal minVolume)
         {
             this.symbol = sym;
-            this.gateioObj = gateio;
-            this.okexObj = okex;
-            this.wasGateOkexProfitable = false;
-            this.minDiffValue = minDiffValue_;
-            this.minStepValue = MinStepValue_;
+            this.minVolume = minVolume;
+            this.objA = a;
+            this.objB = b;
+            this.objC = c;
+
+            this.AB = new DiffState(sym, ref a, ref b, minDiffValue, MinStepValue);
+            this.AC = new DiffState(sym, ref a, ref c, minDiffValue, MinStepValue);
+            this.BC = new DiffState(sym, ref b, ref c, minDiffValue, MinStepValue);
         }
-
-        public bool IsGateOkex(SymbolState symA, SymbolState symB)
-        {
-            if (symA.Exchange == "gate.io" && symB.Exchange == "okex") { return true; }
-            else { return false; }
-        }
-
-        public void WriteProfit(SymbolState symA, SymbolState symB)
-        {
-            if (symA.Ask != 0 && symA.Bid != 0 && symB.Ask != 0 && symB.Bid != 0)
-            {
-                string message = $"{DateTime.Now} ";
-
-                if (symA.Ask < symB.Bid)
-                {
-                    decimal AB = ((symB.Bid - symA.Ask) / symA.Ask) * 100;
-                    if (AB >= this.minDiffValue && (Math.Abs(AB-this.lastGateOkex) >= this.minStepValue))
-                    {
-                        message += $"{symbol} diff {symA.Exchange} –> {symB.Exchange} = {AB}";
-                        message += "\n-----------------------------\n";
-                        File.AppendAllText("Profit.log", message);
-                        if (IsGateOkex(symA, symB))
-                        {
-                            wasGateOkexProfitable = true;
-                            this.lastGateOkex = AB;
-                        }
-                    }
-                }
-                else if (symB.Ask < symA.Bid)
-                {
-                    decimal BA = ((symA.Bid - symB.Ask) / symB.Ask) * 100;
-                    if (BA >= this.minDiffValue && (Math.Abs(BA - this.lastOkexGate) >= this.minStepValue))
-                    {
-                        message += $"{symbol} diff {symB.Exchange} –> {symA.Exchange} = {BA}";
-                        message += "\n-----------------------------\n";
-                        File.AppendAllText("Profit.log", message);
-                        if (IsGateOkex(symA, symB))
-                        {
-                            wasGateOkexProfitable = true;
-                            this.lastOkexGate = BA;
-                        }
-                    }
-
-                }
-                else
-                {
-                    if (wasGateOkexProfitable == true)
-                    {
-                        message += $"{symbol} diff {symA.Exchange} –> {symB.Exchange} no longer profitable";
-                        message += "\n-----------------------------\n";
-                        File.AppendAllText("Profit.log", message);
-                    }                    
-                    if (IsGateOkex(symA, symB)) { wasGateOkexProfitable = false; }
-                }
-
-            }
-        }
+        
 
         public void WriteMarket()
         {
-            if (gateioObj.Ask != this.lastGateioAsk || okexObj.Ask != this.lastOkexAsk || gateioObj.Bid != this.lastGateioBid || okexObj.Bid != this.lastOkexBid)
+            if (this.objA.Ask != this.lastA_Ask || this.objB.Ask != this.lastB_Ask || this.objA.Bid != this.lastA_Bid || this.objB.Bid != this.lastB_Bid || this.objC.Ask != this.lastC_Ask || this.objC.Bid != this.lastC_Bid)
             {
-                string message = $"{DateTime.Now} {this.symbol}:\n{this.gateioObj.Exchange} – ask {gateioObj.Ask}; bid {gateioObj.Bid};\n{okexObj.Exchange} – ask {okexObj.Ask}; bid {okexObj.Bid};";
+                string message = $"{DateTime.Now} {this.symbol}:" +
+                    $"\n{this.objA.Exchange} – ask {objA.Ask}; bid {objA.Bid};" +
+                    $"\n{objB.Exchange} – ask {objB.Ask}; bid {objB.Bid};" +
+                    $"\n{objC.Exchange} – ask {objC.Ask}; bid {objC.Bid};";
+                message += "\n---------------------------\n";
                 File.AppendAllText("Market.log", message);
-                File.AppendAllText("Market.log", "\n---------------------------\n");
-                this.lastGateioAsk = gateioObj.Ask;
-                this.lastOkexAsk = okexObj.Ask;
-                this.lastGateioBid = gateioObj.Bid;
-                this.lastOkexBid = okexObj.Bid;
-                WriteProfit(this.gateioObj, this.okexObj);
+                this.lastA_Ask = objA.Ask;
+                this.lastB_Ask = objB.Ask;
+                this.lastC_Ask = objC.Ask;
+                this.lastA_Bid = objA.Bid;
+                this.lastB_Bid = objB.Bid;
+                this.lastC_Bid = objC.Bid;
+                this.AB.WriteProfit();
+                this.AC.WriteProfit();
+                this.BC.WriteProfit();
+            }
+        }
+
+        public decimal MinVolume
+        {
+            get
+            {
+                return this.minVolume;
             }
         }
     }
